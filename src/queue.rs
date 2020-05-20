@@ -257,6 +257,13 @@ pub struct Queue {
 
     /// Guest physical address of the used ring
     pub used_ring: GuestAddress,
+
+    /// VIRTIO_F_RING_EVENT_IDX negotiated
+    event_idx: bool,
+
+    /// The last used value when using EVENT_IDX
+    signalled_used: Option<Wrapping<u16>>,
+
 }
 
 impl Queue {
@@ -271,6 +278,8 @@ impl Queue {
             used_ring: GuestAddress(0),
             next_avail: Wrapping(0),
             next_used: Wrapping(0),
+            event_idx: false,
+            signalled_used: None,
         }
     }
 
@@ -409,6 +418,31 @@ impl Queue {
     /// of an iterator increment on the queue.
     pub fn go_to_previous_position(&mut self) {
         self.next_avail -= Wrapping(1);
+    }
+
+    pub fn set_event_idx(&mut self, enabled: bool) {
+        /* Also reset the last signalled event */
+        self.signalled_used = None;
+        self.event_idx = enabled;
+    }
+
+    pub fn needs_notification<M: GuestMemory>(&mut self, mem: &M, used_idx: Wrapping<u16>) -> bool {
+        if !self.event_idx {
+            return true;
+        }
+
+        let mut notify = true;
+
+        if let Some(old_idx) = self.signalled_used {
+            if let Some(used_event) = self.get_used_event(&mem) {
+                if (used_idx - used_event - Wrapping(1u16)) >= (used_idx - old_idx) {
+                    notify = false;
+                }
+            }
+        }
+
+        self.signalled_used = Some(used_idx);
+        notify
     }
 }
 
