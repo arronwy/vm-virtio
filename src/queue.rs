@@ -240,8 +240,8 @@ pub struct Queue {
     /// The maximal size in elements offered by the device
     max_size: u16,
 
-    next_avail: Wrapping<u16>,
-    next_used: Wrapping<u16>,
+    pub next_avail: Wrapping<u16>,
+    pub next_used: Wrapping<u16>,
 
     /// The queue size in elements the driver selected
     pub size: u16,
