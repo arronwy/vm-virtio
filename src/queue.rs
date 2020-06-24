@@ -434,7 +434,7 @@ impl Queue {
         let mut notify = true;
 
         if let Some(old_idx) = self.signalled_used {
-            if let Some(used_event) = self.get_used_event(&mem) {
+            if let Some(used_event) = self.get_used_event(mem) {
                 if (used_idx - used_event - Wrapping(1u16)) >= (used_idx - old_idx) {
                     notify = false;
                 }
@@ -444,6 +444,28 @@ impl Queue {
         self.signalled_used = Some(used_idx);
         notify
     }
+
+    /// Return the value present in the used_event field of the avail ring.
+    #[inline(always)]
+    pub fn get_used_event<M: GuestMemory>(&self, mem: &M) -> Option<Wrapping<u16>> {
+        let avail_ring = self.avail_ring;
+        let used_event_addr =
+            match mem.checked_offset(avail_ring, (4 + self.actual_size() * 2) as usize) {
+                Some(a) => a,
+                None => {
+                    warn!("Invalid offset looking for used_event");
+                    return None;
+                }
+            };
+
+        // This fence ensures we're seeing the latest update from the guest.
+        fence(Ordering::SeqCst);
+        match mem.read_obj::<u16>(used_event_addr) {
+            Ok(ret) => Some(Wrapping(ret)),
+            Err(_) => None,
+        }
+    }
+
 }
 
 #[cfg(test)]
